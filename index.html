@@ -1,0 +1,722 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hệ thống biên mục văn bản lưu trữ</title>
+
+<!-- Thư viện đọc PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- Thư viện OCR -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<!-- Thư viện xuất Excel -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+* {box-sizing:border-box}
+
+body {
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#f1f4f8;
+    color:#263445;
+}
+
+header {
+    background:#17365d;
+    color:white;
+    padding:20px 30px;
+}
+
+header h2 {margin:0}
+header p {margin:8px 0 0;color:#d5e3f1}
+
+.container {
+    max-width:1500px;
+    margin:25px auto;
+    padding:0 20px;
+}
+
+.card {
+    background:white;
+    padding:22px;
+    margin-bottom:20px;
+    border-radius:9px;
+    box-shadow:0 2px 8px #0000000d;
+}
+
+h3 {
+    color:#17365d;
+    margin-top:0;
+}
+
+.upload {
+    border:2px dashed #8da9c4;
+    border-radius:8px;
+    padding:35px;
+    text-align:center;
+    background:#f8fbff;
+}
+
+input[type=file] {margin:15px}
+
+button {
+    border:0;
+    border-radius:5px;
+    padding:11px 17px;
+    cursor:pointer;
+    font-weight:bold;
+    margin:4px;
+}
+
+.btn-blue {
+    background:#17365d;
+    color:white;
+}
+
+.btn-green {
+    background:#16834a;
+    color:white;
+}
+
+.btn-gray {
+    background:#e3e9ef;
+    color:#263445;
+}
+
+button:hover {opacity:.85}
+
+button:disabled {
+    opacity:.5;
+    cursor:not-allowed;
+}
+
+#progress {
+    margin-top:15px;
+    color:#1760a0;
+    font-weight:bold;
+}
+
+.progress-bg {
+    height:9px;
+    background:#e2e8f0;
+    border-radius:10px;
+    overflow:hidden;
+    margin-top:10px;
+}
+
+#progressBar {
+    width:0%;
+    height:100%;
+    background:#16834a;
+    transition:width .2s;
+}
+
+.table-wrap {
+    overflow:auto;
+    max-height:650px;
+    border:1px solid #bbb;
+}
+
+table {
+    border-collapse:collapse;
+    width:100%;
+    min-width:1250px;
+    background:white;
+    font-size:13px;
+}
+
+th,td {
+    border:1px solid #888;
+    padding:8px;
+    text-align:center;
+    vertical-align:middle;
+}
+
+th {
+    background:#e9eef4;
+    color:#17365d;
+    position:sticky;
+    top:0;
+    z-index:2;
+}
+
+td[contenteditable="true"] {
+    text-align:left;
+    min-width:100px;
+    background:#fff;
+}
+
+td[contenteditable="true"]:focus {
+    outline:2px solid #2784c7;
+    background:#f0f8ff;
+}
+
+td:nth-child(4) {
+    min-width:300px;
+}
+
+td:nth-child(5) {
+    min-width:190px;
+}
+
+.warning {
+    color:#b45309;
+    background:#fff7e6;
+}
+
+.status {
+    margin-top:12px;
+    color:#64748b;
+    font-size:13px;
+}
+
+footer {
+    text-align:center;
+    color:#888;
+    padding:25px;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h2>HỆ THỐNG BIÊN MỤC VĂN BẢN HÀNH CHÍNH</h2>
+    <p>Phục vụ công tác chỉnh lý và lưu trữ hồ sơ</p>
+</header>
+
+<div class="container">
+
+<div class="card">
+    <h3>1. TẢI LÊN TÀI LIỆU PDF</h3>
+
+    <div class="upload">
+        <p><b>Chọn các file PDF cần biên mục</b></p>
+
+        <input
+            type="file"
+            id="pdfFiles"
+            accept=".pdf,application/pdf"
+            multiple
+        >
+
+        <br>
+
+        <button class="btn-blue" onclick="processPDFs()" id="processBtn">
+            NHẬN DIỆN VÀ BIÊN MỤC
+        </button>
+
+        <div id="fileInfo" class="status">
+            Chưa chọn tài liệu
+        </div>
+    </div>
+
+    <div id="progress"></div>
+
+    <div class="progress-bg">
+        <div id="progressBar"></div>
+    </div>
+
+    <div id="message" class="status"></div>
+</div>
+
+<div class="card">
+
+    <h3>2. BẢNG THỐNG KÊ VĂN BẢN</h3>
+
+    <button class="btn-blue" onclick="addRow()">
+        + Thêm dòng
+    </button>
+
+    <button class="btn-green" onclick="exportExcel()">
+        XUẤT FILE EXCEL
+    </button>
+
+    <button class="btn-gray" onclick="clearTable()">
+        XÓA BẢNG
+    </button>
+
+    <p class="status">
+        Có thể nhấp trực tiếp vào từng ô để chỉnh sửa thông tin.
+        Vui lòng kiểm tra dữ liệu OCR trước khi xuất.
+    </p>
+
+    <div class="table-wrap">
+
+        <table id="resultTable">
+
+            <thead>
+                <tr>
+                    <th>STT</th>
+                    <th>Số, ký hiệu văn bản</th>
+                    <th>Ngày tháng văn bản</th>
+                    <th>Tên loại và trích yếu</th>
+                    <th>Tác giả</th>
+                    <th>Bản gốc/Bản chính</th>
+                    <th>Bản sao</th>
+                    <th>Độ mật</th>
+                    <th>Trang số</th>
+                    <th>Ghi chú</th>
+                </tr>
+            </thead>
+
+            <tbody id="tableBody">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    <div id="rowInfo" class="status">
+        Tổng số: 0 văn bản
+    </div>
+
+</div>
+
+<footer>
+    HỆ THỐNG BIÊN MỤC VĂN BẢN - PHIÊN BẢN MVP 1.0
+</footer>
+
+</div>
+
+<script>
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+let rows = [];
+
+const columns = [
+    "STT",
+    "Số, ký hiệu văn bản",
+    "Ngày tháng văn bản",
+    "Tên loại và trích yếu",
+    "Tác giả",
+    "Bản gốc/Bản chính",
+    "Bản sao",
+    "Độ mật",
+    "Trang số",
+    "Ghi chú"
+];
+
+const fileInput = document.getElementById("pdfFiles");
+
+fileInput.addEventListener("change", function() {
+    document.getElementById("fileInfo").innerText =
+        "Đã chọn " + this.files.length + " tài liệu PDF";
+});
+
+// Chuẩn hóa văn bản
+function clean(text) {
+    return text
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+// Tìm thông tin theo biểu thức
+function findPattern(text, patterns) {
+
+    for (let pattern of patterns) {
+
+        let match = text.match(pattern);
+
+        if (match) return clean(match[1]);
+    }
+
+    return "";
+}
+
+// Chuẩn hóa ngày tháng
+function normalizeDate(date) {
+
+    if (!date) return "";
+
+    let m = date.match(
+        /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/
+    );
+
+    if (m) {
+        return m[1].padStart(2,"0") + "/" +
+               m[2].padStart(2,"0") + "/" + m[3];
+    }
+
+    m = date.match(
+        /(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})/i
+    );
+
+    if (m) {
+        return m[1].padStart(2,"0") + "/" +
+               m[2].padStart(2,"0") + "/" + m[3];
+    }
+
+    return date;
+}
+
+// Trích xuất dữ liệu văn bản
+function extractMetadata(text, pageCount) {
+
+    let number = findPattern(text, [
+        /(?:Số|Số hiệu)\s*[:：]?\s*([0-9A-ZĐ./\-]+)/i,
+        /\b(\d{1,5}\/[A-ZĐ]{1,15}(?:-[A-ZĐ0-9]+)*)\b/i
+    ]);
+
+    let date = findPattern(text, [
+        /(\d{1,2}\s*tháng\s*\d{1,2}\s*năm\s*\d{4})/i,
+        /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/
+    ]);
+
+    date = normalizeDate(date);
+
+    let types = [
+        "BÁO CÁO",
+        "QUYẾT ĐỊNH",
+        "KẾ HOẠCH",
+        "CÔNG VĂN",
+        "THÔNG BÁO",
+        "TỜ TRÌNH",
+        "BIÊN BẢN",
+        "NGHỊ QUYẾT",
+        "CHỈ THỊ",
+        "HƯỚNG DẪN",
+        "GIẤY MỜI",
+        "PHƯƠNG ÁN",
+        "ĐỀ ÁN"
+    ];
+
+    let lines = text.split(/\n/).map(clean).filter(Boolean);
+
+    let title = "";
+    let excerpt = "";
+
+    for (let i = 0; i < lines.length; i++) {
+
+        let line = lines[i];
+
+        let found = types.find(type =>
+            line.toUpperCase().startsWith(type)
+        );
+
+        if (found) {
+
+            title = line;
+
+            if (line.toUpperCase() === found) {
+
+                excerpt = lines
+                    .slice(i+1,i+5)
+                    .filter(x => x.length > 15)
+                    .join(" ")
+                    .substring(0,400);
+
+                if (excerpt) title += ": " + excerpt;
+            }
+
+            break;
+        }
+    }
+
+    let author = "";
+
+    let authorPatterns = [
+        /(?:ỦY BAN|UỶ BAN|UBND|HỘI LIÊN HIỆP|BAN THƯỜNG VỤ|ĐẢNG ỦY|PHÒNG|SỞ|BỘ)[^\n]{3,120}/i
+    ];
+
+    author = findPattern(text, authorPatterns);
+
+    let note = "";
+
+    if (!number || !date || !title || !author) {
+        note = "Cần kiểm tra thông tin nhận diện";
+    }
+
+    return {
+        "STT": rows.length + 1,
+        "Số, ký hiệu văn bản": number,
+        "Ngày tháng văn bản": date,
+        "Tên loại và trích yếu": title,
+        "Tác giả": author,
+        "Bản gốc/Bản chính": "x",
+        "Bản sao": "",
+        "Độ mật": "",
+        "Trang số": pageCount,
+        "Ghi chú": note
+    };
+}
+
+// Đọc PDF và OCR
+async function readPDF(file) {
+
+    const buffer = await file.arrayBuffer();
+
+    const pdf = await pdfjsLib.getDocument({
+        data: buffer
+    }).promise;
+
+    let fullText = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+
+        const page = await pdf.getPage(i);
+
+        const content = await page.getTextContent();
+
+        let pageText = content.items
+            .map(item => item.str)
+            .join(" ");
+
+        // PDF không có lớp chữ thì chuyển sang OCR
+        if (pageText.trim().length < 35) {
+
+            const viewport = page.getViewport({
+                scale: 2
+            });
+
+            const canvas = document.createElement("canvas");
+
+            const context = canvas.getContext("2d");
+
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({
+                canvasContext: context,
+                viewport: viewport
+            }).promise;
+
+            const result = await Tesseract.recognize(
+                canvas,
+                "vie+eng",
+                {
+                    logger: info => {
+
+                        if (info.status === "recognizing text") {
+                            document.getElementById("message").innerText =
+                                "Đang OCR trang " + i + "/" + pdf.numPages;
+                        }
+                    }
+                }
+            );
+
+            pageText = result.data.text;
+
+            canvas.remove();
+        }
+
+        fullText += "\n" + pageText;
+    }
+
+    return {
+        text: fullText,
+        pages: pdf.numPages
+    };
+}
+
+// Xử lý nhiều PDF
+async function processPDFs() {
+
+    const files = Array.from(fileInput.files);
+
+    if (!files.length) {
+        alert("Vui lòng chọn file PDF!");
+        return;
+    }
+
+    const btn = document.getElementById("processBtn");
+
+    btn.disabled = true;
+
+    try {
+
+        for (let i = 0; i < files.length; i++) {
+
+            const file = files[i];
+
+            document.getElementById("progress").innerText =
+                "Đang xử lý: " + file.name +
+                " (" + (i+1) + "/" + files.length + ")";
+
+            document.getElementById("progressBar").style.width =
+                ((i+1)/files.length*100) + "%";
+
+            try {
+
+                const result = await readPDF(file);
+
+                const metadata = extractMetadata(
+                    result.text,
+                    result.pages
+                );
+
+                rows.push(metadata);
+
+                renderTable();
+
+            } catch(error) {
+
+                console.error(error);
+
+                rows.push({
+                    "STT": rows.length+1,
+                    "Số, ký hiệu văn bản": "",
+                    "Ngày tháng văn bản": "",
+                    "Tên loại và trích yếu": "",
+                    "Tác giả": "",
+                    "Bản gốc/Bản chính": "",
+                    "Bản sao": "",
+                    "Độ mật": "",
+                    "Trang số": "",
+                    "Ghi chú": "Không đọc được file: " + file.name
+                });
+
+                renderTable();
+            }
+        }
+
+        document.getElementById("message").innerText =
+            "Hoàn thành nhận diện " + files.length + " tài liệu.";
+
+    } catch(error) {
+
+        alert("Có lỗi xử lý PDF: " + error.message);
+
+    } finally {
+
+        btn.disabled = false;
+
+        updateCount();
+    }
+}
+
+// Hiển thị bảng
+function renderTable() {
+
+    const tbody = document.getElementById("tableBody");
+
+    tbody.innerHTML = "";
+
+    rows.forEach((row,index) => {
+
+        let tr = document.createElement("tr");
+
+        columns.forEach(col => {
+
+            let td = document.createElement("td");
+
+            td.contentEditable = true;
+
+            td.spellcheck = false;
+
+            td.innerText = row[col] ?? "";
+
+            td.addEventListener("input", function() {
+
+                rows[index][col] = this.innerText;
+
+            });
+
+            tr.appendChild(td);
+
+        });
+
+        tbody.appendChild(tr);
+
+    });
+
+    updateCount();
+}
+
+// Thêm dòng thủ công
+function addRow() {
+
+    let row = {};
+
+    columns.forEach(col => row[col] = "");
+
+    row.STT = rows.length + 1;
+
+    rows.push(row);
+
+    renderTable();
+}
+
+// Cập nhật tổng số
+function updateCount() {
+
+    document.getElementById("rowInfo").innerText =
+        "Tổng số: " + rows.length + " văn bản";
+}
+
+// Xóa bảng
+function clearTable() {
+
+    if (!confirm("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu?")) {
+        return;
+    }
+
+    rows = [];
+
+    renderTable();
+
+    document.getElementById("message").innerText = "";
+}
+
+// Xuất Excel
+function exportExcel() {
+
+    if (!rows.length) {
+        alert("Chưa có dữ liệu để xuất!");
+        return;
+    }
+
+    const data = [
+        columns,
+        ...rows.map((row,index) =>
+            columns.map(col =>
+                col === "STT" ? (row[col] || index+1) : (row[col] ?? "")
+            )
+        )
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    ws["!cols"] = [
+        {wch:8},
+        {wch:22},
+        {wch:18},
+        {wch:65},
+        {wch:35},
+        {wch:17},
+        {wch:12},
+        {wch:12},
+        {wch:12},
+        {wch:32}
+    ];
+
+    ws["!rows"] = [
+        {hpt:35},
+        ...rows.map(() => ({hpt:45}))
+    ];
+
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+        wb,
+        ws,
+        "Thong ke van ban"
+    );
+
+    XLSX.writeFile(
+        wb,
+        "BANG_THONG_KE_VAN_BAN.xlsx"
+    );
+}
+
+</script>
+
+</body>
+</html>
